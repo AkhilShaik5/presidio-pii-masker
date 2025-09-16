@@ -70,13 +70,27 @@ fi
 
 # Install dependencies
 echo "Installing dependencies..."
-python -m pip install --upgrade pip
+python -m pip install --upgrade pip setuptools wheel
+
+# Install numpy first to avoid version conflicts
+echo "Installing numpy..."
+pip install --no-cache-dir numpy>=1.24.0
+
+# Install other dependencies
+echo "Installing other dependencies..."
 pip install --no-cache-dir -r requirements.txt
+
+# Verify numpy installation
+echo "Verifying numpy installation..."
+python -c "import numpy; print('Numpy version:', numpy.__version__)"
 
 # Install spacy model with error handling
 echo "Installing spacy model..."
 python -m spacy download en_core_web_lg || {
-    echo "Failed to install spacy model, continuing anyway..."
+    echo "Failed to install spacy model, trying alternative installation..."
+    pip install --no-cache-dir https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1-py3-none-any.whl || {
+        echo "Failed to install spacy model, continuing anyway..."
+    }
 }
 
 # Create templates directory if it doesn't exist
