@@ -72,25 +72,52 @@ fi
 echo "Installing dependencies..."
 python -m pip install --upgrade pip setuptools wheel
 
-# Install numpy first to avoid version conflicts
+# Clean pip cache
+echo "Cleaning pip cache..."
+pip cache purge
+
+# Uninstall existing numpy if present
+echo "Removing existing numpy installation..."
+pip uninstall -y numpy
+
+# Install numpy with specific version
 echo "Installing numpy..."
-pip install --no-cache-dir numpy>=1.24.0
+pip install --no-cache-dir numpy==1.23.5
+
+# Verify numpy installation
+echo "Verifying numpy installation..."
+python -c "import numpy; print('Numpy version:', numpy.__version__)" || {
+    echo "Failed to import numpy, trying alternative installation..."
+    pip uninstall -y numpy
+    pip install --no-cache-dir numpy==1.21.6
+    python -c "import numpy; print('Numpy version:', numpy.__version__)"
+}
 
 # Install other dependencies
 echo "Installing other dependencies..."
 pip install --no-cache-dir -r requirements.txt
 
-# Verify numpy installation
-echo "Verifying numpy installation..."
-python -c "import numpy; print('Numpy version:', numpy.__version__)"
-
 # Install spacy model with error handling
 echo "Installing spacy model..."
-python -m spacy download en_core_web_lg || {
-    echo "Failed to install spacy model, trying alternative installation..."
-    pip install --no-cache-dir https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1-py3-none-any.whl || {
-        echo "Failed to install spacy model, continuing anyway..."
-    }
+MODEL_VERSION="3.7.1"
+DIRECT_DOWNLOAD="https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-${MODEL_VERSION}/en_core_web_lg-${MODEL_VERSION}.tar.gz"
+
+# Try multiple installation methods
+(python -m spacy download en_core_web_lg && echo "Successfully installed spacy model via download command") || \
+(pip install --no-cache-dir en-core-web-lg==${MODEL_VERSION} && echo "Successfully installed spacy model via pip") || \
+(pip install --no-cache-dir "${DIRECT_DOWNLOAD}" && echo "Successfully installed spacy model via direct download") || \
+{
+    echo "Failed to install large model, falling back to medium model..."
+    python -m spacy download en_core_web_md || pip install --no-cache-dir en-core-web-md
+}
+
+# Verify spacy and model installation
+echo "Verifying spacy installation..."
+python -c "import spacy; nlp = spacy.load('en_core_web_lg' if spacy.util.is_package('en_core_web_lg') else 'en_core_web_md'); print('Loaded model:', nlp.meta['name'])" || {
+    echo "Failed to load spacy model, trying to repair installation..."
+    pip uninstall -y spacy
+    pip install --no-cache-dir spacy==${SPACY_VERSION}
+    python -m spacy download en_core_web_lg
 }
 
 # Create templates directory if it doesn't exist
