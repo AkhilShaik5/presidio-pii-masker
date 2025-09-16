@@ -14,23 +14,63 @@ export PORT=${PORT:-8000}
 export WORKERS=${WORKERS:-2}
 export TIMEOUT=${TIMEOUT:-600}
 
-# Set working directory to where the app is
-cd /home/site/wwwroot
+# Handle Azure App Service directory structure
+if [ -d "/home/site/repository" ]; then
+    echo "Found repository at /home/site/repository"
+    SITE_DIR="/home/site/repository"
+elif [ -d "/home/site/wwwroot" ]; then
+    echo "Found application at /home/site/wwwroot"
+    SITE_DIR="/home/site/wwwroot"
+else
+    echo "Error: Could not find application directory"
+    exit 1
+fi
+
+# Set working directory
+echo "Changing to directory: $SITE_DIR"
+cd $SITE_DIR
+
+# List directory contents for debugging
+echo "Current directory contents:"
+ls -la
 
 # Check if requirements.txt exists
 if [ ! -f requirements.txt ]; then
-    echo "Error: requirements.txt not found"
-    exit 1
+    echo "Warning: requirements.txt not found in current directory"
+    echo "Searching in parent directories..."
+    REQUIREMENTS_FILE=$(find / -name requirements.txt -type f 2>/dev/null | head -n 1)
+    if [ -z "$REQUIREMENTS_FILE" ]; then
+        echo "Error: requirements.txt not found anywhere"
+        exit 1
+    else
+        echo "Found requirements.txt at: $REQUIREMENTS_FILE"
+        cp "$REQUIREMENTS_FILE" ./requirements.txt
+    fi
 fi
 
 # Check if app.py exists
 if [ ! -f app.py ]; then
-    echo "Error: app.py not found"
-    exit 1
+    echo "Warning: app.py not found in current directory"
+    echo "Searching in parent directories..."
+    APP_FILE=$(find / -name app.py -type f 2>/dev/null | head -n 1)
+    if [ -z "$APP_FILE" ]; then
+        echo "Error: app.py not found anywhere"
+        exit 1
+    else
+        echo "Found app.py at: $APP_FILE"
+        cp "$APP_FILE" ./app.py
+    fi
+fi
+
+# Activate virtual environment if it exists
+if [ -d "antenv" ]; then
+    echo "Activating virtual environment: antenv"
+    source antenv/bin/activate
 fi
 
 # Install dependencies
 echo "Installing dependencies..."
+python -m pip install --upgrade pip
 pip install --no-cache-dir -r requirements.txt
 
 # Install spacy model with error handling
@@ -38,6 +78,9 @@ echo "Installing spacy model..."
 python -m spacy download en_core_web_lg || {
     echo "Failed to install spacy model, continuing anyway..."
 }
+
+# Create templates directory if it doesn't exist
+mkdir -p templates
 
 # Start Gunicorn with proper configuration
 echo "Starting Gunicorn server..."
@@ -50,4 +93,5 @@ exec gunicorn \
     --capture-output \
     --log-level=debug \
     --preload \
+    --chdir "$SITE_DIR" \
     app:app
